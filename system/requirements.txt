@@ -3,3 +3,12 @@
 
 # Used by system/utilities/gen-objectives-xlsx.py
 openpyxl>=3.1
+
+# Used by system/agents/housekeeper/calendar-fetch-outlook.py (Outlook/365 calendar sync)
+msal>=1.20
+requests>=2.31
+
+# Used by system/agents/housekeeper/calendar-fetch-google.py (Google Calendar sync)
+google-auth>=2.20
+google-auth-oauthlib>=1.0
+google-api-python-client>=2.90

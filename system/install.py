@@ -226,14 +226,9 @@ def step_meetily():
 
 
 def step_calendar():
-    title("5 · Apple Calendar Sync")
+    title("5 · Calendar Sync")
 
-    if not IS_MAC:
-        skip("Apple Calendar sync (macOS only)")
-        results.append(("Calendar sync", "–", "macOS only"))
-        return
-
-    if not confirm("Do you want to sync Apple Calendar to the vault?"):
+    if not confirm("Do you want to sync your calendar to the vault?"):
         skip("Calendar sync")
         config["calendar_enabled"] = False
         results.append(("Calendar sync", "–", "Skipped"))
@@ -241,7 +236,38 @@ def step_calendar():
 
     config["calendar_enabled"] = True
 
-    # Check swift
+    # Ask which provider
+    print()
+    print(f"  Which calendar do you use?")
+    options = []
+    if IS_MAC:
+        options.append(("apple",   "Apple Calendar (macOS only)"))
+    options.append(("outlook", "Microsoft Outlook / 365"))
+    options.append(("google",  "Google Calendar"))
+
+    for i, (key, label) in enumerate(options, 1):
+        print(f"  {DIM}{i}{RESET}  {label}")
+    print()
+
+    while True:
+        choice = ask(f"Enter number [1–{len(options)}]")
+        if choice.isdigit() and 1 <= int(choice) <= len(options):
+            provider = options[int(choice) - 1][0]
+            break
+        warn("Invalid choice — try again.")
+
+    config["calendar_provider"] = provider
+    ok(f"Calendar provider: {provider}")
+
+    if provider == "apple":
+        _setup_calendar_apple()
+    elif provider == "outlook":
+        _setup_calendar_outlook()
+    elif provider == "google":
+        _setup_calendar_google()
+
+
+def _setup_calendar_apple():
     swift = shutil.which("swift")
     if swift:
         ok(f"Swift found at: {swift}")
@@ -250,10 +276,76 @@ def step_calendar():
         info("Install Xcode Command Line Tools: xcode-select --install")
         results.append(("Calendar sync", "⚠", "Install Xcode Command Line Tools"))
         return
-
-    # Check calendar permissions
     info("Calendar access requires permission — you may see a system prompt on first run.")
-    results.append(("Calendar sync", "✓", "Swift found · Calendar access will prompt on first run"))
+    results.append(("Calendar sync", "✓", "Apple Calendar · Swift found"))
+
+
+def _setup_calendar_outlook():
+    print()
+    info("Outlook calendar sync uses the Microsoft Graph API.")
+    info("You need a free Azure app registration. Steps:")
+    info("  1. Go to https://portal.azure.com → Azure Active Directory → App registrations")
+    info("  2. New registration → any name → Accounts in any org + personal")
+    info("  3. Add permission: Microsoft Graph → Delegated → Calendars.Read")
+    info("  4. Copy the Application (client) ID")
+    print()
+
+    client_id = ask("Azure Application (client) ID")
+    tenant_id = ask("Tenant ID (leave blank for personal/multi-tenant accounts)", "common")
+
+    config["ms_client_id"] = client_id
+    config["ms_tenant_id"] = tenant_id or "common"
+
+    my_email = ask("Your Outlook email address (used for RSVP detection)")
+    config["my_email"] = my_email
+
+    # Verify msal is installed
+    try:
+        import msal  # noqa
+        ok("msal library found.")
+    except ImportError:
+        warn("msal not installed — will be installed in the dependencies step.")
+
+    results.append(("Calendar sync", "✓", f"Outlook · client_id set · first run will open browser for auth"))
+
+
+def _setup_calendar_google():
+    print()
+    info("Google Calendar sync uses the Google Calendar API.")
+    info("You need a free Google Cloud credentials file. Steps:")
+    info("  1. Go to https://console.cloud.google.com → APIs & Services → Credentials")
+    info("  2. Create OAuth 2.0 Client ID → Desktop app")
+    info("  3. Download the JSON credentials file")
+    print()
+
+    creds_path = ask(
+        "Path to downloaded credentials JSON file",
+        str(Path.home() / ".vault-google-credentials.json"),
+    )
+
+    if Path(creds_path).exists():
+        # Copy to standard location if not already there
+        target = Path.home() / ".vault-google-credentials.json"
+        if Path(creds_path) != target:
+            import shutil as _shutil
+            _shutil.copy(creds_path, target)
+            target.chmod(0o600)
+            ok(f"Credentials copied to: {target}")
+        config["google_creds_file"] = str(target)
+    else:
+        warn(f"File not found at {creds_path} — set GOOGLE_CREDS_FILE env var before first run.")
+        config["google_creds_file"] = creds_path
+
+    my_email = ask("Your Google account email (used for RSVP detection)")
+    config["my_email"] = my_email
+
+    try:
+        from googleapiclient.discovery import build  # noqa
+        ok("Google API libraries found.")
+    except ImportError:
+        warn("Google libraries not installed — will be installed in the dependencies step.")
+
+    results.append(("Calendar sync", "✓", f"Google Calendar · first run will open browser for auth"))
 
 
 def step_mcp():
@@ -371,6 +463,15 @@ def _setup_launchd(agent_dir: Path):
         env_vars["MEETILY_DB"] = config["meetily_db"]
     if config.get("claude_bin"):
         env_vars["CLAUDE_BIN"] = config["claude_bin"]
+    if config.get("calendar_provider"):
+        env_vars["CALENDAR_PROVIDER"] = config["calendar_provider"]
+    if config.get("my_email"):
+        env_vars["MY_EMAIL"] = config["my_email"]
+    if config.get("ms_client_id"):
+        env_vars["MS_CLIENT_ID"] = config["ms_client_id"]
+        env_vars["MS_TENANT_ID"] = config.get("ms_tenant_id", "common")
+    if config.get("google_creds_file"):
+        env_vars["GOOGLE_CREDS_FILE"] = config["google_creds_file"]
 
     for label, program, args, log, hours in jobs:
         intervals = []
@@ -550,6 +651,19 @@ def step_config():
             "",
             f"meetily_db: {config['meetily_db']}",
         ]
+
+    if config.get("calendar_provider"):
+        lines += [
+            "",
+            f"calendar_provider: {config['calendar_provider']}",
+        ]
+        if config.get("my_email"):
+            lines.append(f"my_email: {config['my_email']}")
+        if config.get("ms_client_id"):
+            lines.append(f"ms_client_id: {config['ms_client_id']}")
+            lines.append(f"ms_tenant_id: {config.get('ms_tenant_id', 'common')}")
+        if config.get("google_creds_file"):
+            lines.append(f"google_creds_file: {config['google_creds_file']}")
 
     config_path.write_text("\n".join(lines) + "\n")
     ok(f"Written: {config_path}")

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-Syncs Apple Calendar with Obsidian vault via EventKit (calendar-fetch.swift).
+Calendar sync dispatcher — routes to the right backend based on CALENDAR_PROVIDER.
+Supported: apple (macOS), outlook (all platforms), google (all platforms)
 Creates meeting stubs in meetings/ for upcoming accepted events (14 days).
-Skips declined and unresponded invites.
 """
 
 from __future__ import annotations
 import os
 import subprocess
+import sys
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -15,18 +16,33 @@ from typing import Optional
 
 VAULT        = Path(os.environ["VAULT_DIR"]) if "VAULT_DIR" in os.environ else Path(__file__).parents[3]
 MEETINGS_DIR = VAULT / "meetings"
-SWIFT_SCRIPT = Path(__file__).parent / "calendar-fetch.swift"
+AGENT_DIR    = Path(__file__).parent
+PROVIDER     = os.environ.get("CALENDAR_PROVIDER", "apple").lower()
 
 # Events to skip regardless of RSVP (personal blocks, not meetings)
 SKIP_TITLES  = {"lunch", "breakfast", "dinner"}
 
 
 def fetch_events() -> str:
-    r = subprocess.run(
-        ["swift", str(SWIFT_SCRIPT)],
-        capture_output=True, text=True, timeout=30,
-    )
-    return r.stdout.strip()
+    if PROVIDER == "apple":
+        swift = AGENT_DIR / "calendar-fetch.swift"
+        r = subprocess.run(["swift", str(swift)], capture_output=True, text=True, timeout=30)
+        return r.stdout.strip()
+    elif PROVIDER == "outlook":
+        fetcher = AGENT_DIR / "calendar-fetch-outlook.py"
+        r = subprocess.run([sys.executable, str(fetcher)], capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            print(r.stderr.strip(), file=sys.stderr)
+        return r.stdout.strip()
+    elif PROVIDER == "google":
+        fetcher = AGENT_DIR / "calendar-fetch-google.py"
+        r = subprocess.run([sys.executable, str(fetcher)], capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            print(r.stderr.strip(), file=sys.stderr)
+        return r.stdout.strip()
+    else:
+        print(f"Unknown CALENDAR_PROVIDER: {PROVIDER}. Use: apple, outlook, google", file=sys.stderr)
+        sys.exit(1)
 
 
 def slugify(text: str) -> str:
