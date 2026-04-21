@@ -192,11 +192,6 @@ def step_clickup():
 def step_meetily():
     title("4 · Meetily Export")
 
-    if not IS_MAC:
-        skip("Meetily (macOS only)")
-        results.append(("Meetily export", "–", "macOS only"))
-        return
-
     if not confirm("Do you use Meetily for meeting recordings?"):
         skip("Meetily")
         results.append(("Meetily export", "–", "Skipped"))
@@ -204,10 +199,18 @@ def step_meetily():
         return
 
     config["meetily_enabled"] = True
-    default_db = str(Path.home() / "Library/Application Support/com.meetily.ai/meeting_minutes.sqlite")
+
+    # OS-aware default path
+    if IS_MAC:
+        default_db = str(Path.home() / "Library/Application Support/com.meetily.ai/meeting_minutes.sqlite")
+    elif IS_WIN:
+        default_db = str(Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming")) / "com.meetily.ai/meeting_minutes.sqlite")
+    else:
+        xdg = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+        default_db = str(xdg / "com.meetily.ai/meeting_minutes.sqlite")
 
     if Path(default_db).exists():
-        ok(f"Meetily database found at default path.")
+        ok("Meetily database found at default path.")
         config["meetily_db"] = default_db
     else:
         warn("Meetily database not found at default path.")
@@ -217,7 +220,7 @@ def step_meetily():
             if not Path(path).exists():
                 warn("Database not found — make sure Meetily has been run at least once.")
         else:
-            info("Install Meetily from: https://meetily.com")
+            info("Install Meetily from: https://meetily.ai")
             config["meetily_db"] = default_db
             results.append(("Meetily export", "⚠", "Install Meetily and re-run"))
             return

@@ -13,11 +13,12 @@ Maintains the vault and local data sources in sync. Runs automatically on weekda
 | Skill | macOS | Linux | Windows |
 |---|---|---|---|
 | Daily assimilate | ✅ | ✅ | ✅ |
-| Calendar sync | ✅ (Apple Calendar via EventKit) | ❌ | ❌ |
-| Meetily export | ✅ (Meetily is macOS-only) | ❌ | ❌ |
+| Calendar sync (Apple) | ✅ | ❌ | ❌ |
+| Calendar sync (Outlook/Google) | ✅ | ✅ | ✅ |
+| Meetily export | ✅ | ✅ | ✅ |
 | Scheduler | launchd | systemd (manual setup) | Task Scheduler (manual setup) |
 
-Calendar sync and Meetily export are macOS-only. Linux/Windows team members can still use daily assimilate — they'll need to set up their own scheduler instead of using `install-launchd.sh`.
+Apple Calendar is macOS-only. Outlook and Google Calendar work everywhere. Meetily works on all platforms — the installer detects the correct database path per OS.
 
 ## Configuration
 All machine-specific paths are set via environment variables or `system/config.yaml`:

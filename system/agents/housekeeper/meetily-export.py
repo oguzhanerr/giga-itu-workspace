@@ -6,6 +6,7 @@ creates task notes from action items, and updates the daily brief.
 """
 
 import os
+import platform
 import sqlite3
 import json
 import re
@@ -14,7 +15,19 @@ from datetime import datetime
 from pathlib import Path
 
 VAULT       = Path(os.environ["VAULT_DIR"]) if "VAULT_DIR" in os.environ else Path(__file__).parents[3]
-DB          = Path(os.environ.get("MEETILY_DB", str(Path.home() / "Library/Application Support/com.meetily.ai/meeting_minutes.sqlite")))
+
+def _default_meetily_db() -> Path:
+    _os = platform.system()
+    if _os == "Darwin":
+        return Path.home() / "Library/Application Support/com.meetily.ai/meeting_minutes.sqlite"
+    elif _os == "Windows":
+        base = Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming"))
+        return base / "com.meetily.ai/meeting_minutes.sqlite"
+    else:  # Linux
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+        return base / "com.meetily.ai/meeting_minutes.sqlite"
+
+DB          = Path(os.environ.get("MEETILY_DB", str(_default_meetily_db())))
 MEETINGS_DIR = VAULT / "meetings"
 TASKS_DIR   = VAULT / "tasks"
 DAILY_BRIEF = VAULT / "0_daily-brief/daily-brief.md"

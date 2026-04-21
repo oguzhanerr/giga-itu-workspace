@@ -77,8 +77,9 @@ Key environment variables (can be set instead of config.yaml):
 | Feature | macOS | Linux | Windows |
 |---|---|---|---|
 | Daily assimilate | ✅ | ✅ | ✅ |
-| Calendar sync | ✅ | ❌ | ❌ |
-| Meetily export | ✅ | ❌ | ❌ |
+| Calendar sync (Apple) | ✅ | ❌ | ❌ |
+| Calendar sync (Outlook/Google) | ✅ | ✅ | ✅ |
+| Meetily export | ✅ | ✅ | ✅ |
 | ClickUp sync | ✅ | ✅ | ⚠ WSL only |
 | Claude desktop MCP | ✅ | ✅ | ✅ |
 
