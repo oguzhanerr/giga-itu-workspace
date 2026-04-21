@@ -78,8 +78,8 @@ def step_welcome():
 {BOLD}╔══════════════════════════════════════════════════════════╗
 ║           Vault Agent System — Installer                 ║
 ║                                                          ║
-║  Sets up: Obsidian vault · Claude Code · ClickUp sync   ║
-║           Meetily · Apple Calendar · MCP · Scheduler    ║
+║  Sets up: New vault scaffold · Claude Code · ClickUp    ║
+║           Meetily · Calendar sync · MCP · Scheduler     ║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 
 Platform: {BOLD}{OS}{RESET}
@@ -90,6 +90,142 @@ what's available on your system. You can skip anything.
 """)
     if not confirm("Ready to start?"):
         sys.exit(0)
+
+
+VAULT_FOLDERS = [
+    "0_daily-brief",
+    "1_inbox",
+    "1_inbox/archive",
+    "2_for-review",
+    "2_for-review/stale",
+    "2_for-review/not-urgent",
+    "tasks",
+    "ideas",
+    "projects",
+    "meetings",
+    "journal/personal",
+    "journal/strategy",
+    "content/ideas",
+    "content/drafts",
+    "content/published",
+    "CRM/people",
+    "CRM/companies",
+    "system/agents",
+    "weekly-reviews",
+]
+
+CLAUDE_MD_TEMPLATE = """\
+# CLAUDE.md
+
+This is an Obsidian Vault — a personal operating system.
+
+## Who You Are
+
+[Your name and role here.]
+
+## How to Work With You
+
+- Default: direct and concise.
+- British spelling by default.
+- No H1 headers in notes — Obsidian uses the filename as the title.
+
+## Vault Structure
+
+- `0_daily-brief/` — daily-brief.md (Claude-maintained structured view of the day)
+- `1_inbox/` — Daily notes (YYYY-MM-DD.md), archive/
+- `2_for-review/` — Items Claude has produced that need your review
+- `tasks/` — Individual task notes with front matter metadata
+- `ideas/` — Someday/maybe items
+- `projects/` — Project folders
+- `meetings/` — Meeting notes
+- `journal/` — Evergreen notes (personal/ and strategy/)
+- `CRM/` — Contact and company tracking
+
+## Processing
+
+- All generated docs go to `2_for-review/` before filing
+- Never mark tasks done unless you have confirmed
+- Daily notes are your space — Claude never overwrites your content
+"""
+
+DAILY_BRIEF_TEMPLATE = """\
+## Priorities
+
+
+## Tasks Needing Attention
+
+
+## Questions for You
+
+
+## Recently Completed
+
+
+---
+*Updated by Claude during processing.*
+"""
+
+
+def step_scaffold_vault():
+    title("0 · New Vault Setup")
+
+    if not confirm("Are you setting up a brand-new vault?", default=False):
+        info("Skipping vault scaffold — using existing vault.")
+        return
+
+    print()
+    default_path = str(Path.home() / "Documents" / "MyVault")
+    vault_path_str = ask("Where should the new vault be created?", default_path)
+    vault_path = Path(vault_path_str).expanduser().resolve()
+
+    if vault_path.exists() and any(vault_path.iterdir()):
+        warn(f"{vault_path} already exists and is not empty.")
+        if not confirm("Create vault structure inside it anyway?", default=False):
+            info("Skipping vault scaffold.")
+            return
+    else:
+        vault_path.mkdir(parents=True, exist_ok=True)
+
+    # Create folders
+    for folder in VAULT_FOLDERS:
+        (vault_path / folder).mkdir(parents=True, exist_ok=True)
+
+    ok(f"Created {len(VAULT_FOLDERS)} folders.")
+
+    # Write template files
+    (vault_path / "CLAUDE.md").write_text(CLAUDE_MD_TEMPLATE)
+    ok("Written: CLAUDE.md (edit this to personalise)")
+
+    (vault_path / "0_daily-brief" / "daily-brief.md").write_text(DAILY_BRIEF_TEMPLATE)
+    ok("Written: 0_daily-brief/daily-brief.md")
+
+    today = __import__("datetime").date.today().isoformat()
+    (vault_path / "1_inbox" / f"{today}.md").write_text(f"## {today}\n\n")
+    ok(f"Written: 1_inbox/{today}.md (today's daily note)")
+
+    # Copy system files from repo (the installer's own directory)
+    repo_system = Path(__file__).parent
+    for fname in ["processing-rules.md", "process-workflow.md", "task-template.md",
+                  "profile.md", "goals.md"]:
+        src = repo_system / fname
+        dst = vault_path / "system" / fname
+        if src.exists():
+            import shutil as _shutil
+            _shutil.copy(src, dst)
+            ok(f"Copied: system/{fname}")
+        else:
+            dst.write_text(f"# {fname.replace('-', ' ').replace('.md', '').title()}\n\n[Fill this in.]\n")
+            ok(f"Created stub: system/{fname}")
+
+    # Override VAULT_DIR for the rest of the installer
+    global VAULT_DIR
+    VAULT_DIR = vault_path
+    config["vault_dir"] = str(vault_path)
+
+    print()
+    ok(f"New vault scaffolded at: {vault_path}")
+    info("Open this folder in Obsidian to get started.")
+    results.append(("Vault scaffold", "✓", str(vault_path)))
 
 
 def step_vault():
@@ -699,6 +835,7 @@ def step_summary():
 
 def main():
     step_welcome()
+    step_scaffold_vault()
     step_vault()
     step_claude()
     step_clickup()
