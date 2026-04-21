@@ -3,6 +3,8 @@
 
 VAULT="${VAULT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 CLAUDE="${CLAUDE_BIN:-$HOME/.local/bin/claude}"
+# Haiku: lightweight read/write task, no complex reasoning needed
+MODEL="${DAILY_ASSIMILATE_MODEL:-claude-haiku-4-5-20251001}"
 
 "$CLAUDE" -p "You are running an end-of-day retrospective for Oz's personal vault. Your job is to review what happened today and persist any stable learnings to memory files or CLAUDE.md.
 
@@ -24,5 +26,6 @@ Rules:
 - Do not duplicate existing conventions.
 - Be concise — one line per lesson where possible.
 - If nothing new happened worth persisting, just log that and exit." \
+  --model "$MODEL" \
   --allowedTools Bash,Read,Write,Edit,Glob,Grep \
   --add-dir "$VAULT"

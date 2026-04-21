@@ -611,6 +611,10 @@ def _setup_launchd(agent_dir: Path):
         env_vars["MS_TENANT_ID"] = config.get("ms_tenant_id", "common")
     if config.get("google_creds_file"):
         env_vars["GOOGLE_CREDS_FILE"] = config["google_creds_file"]
+    # Model overrides — default to Haiku for scheduled lightweight tasks
+    env_vars["DAILY_ASSIMILATE_MODEL"] = config.get(
+        "daily_assimilate_model", "claude-haiku-4-5-20251001"
+    )
 
     for label, program, args, log, hours in jobs:
         intervals = []
@@ -803,6 +807,12 @@ def step_config():
             lines.append(f"ms_tenant_id: {config.get('ms_tenant_id', 'common')}")
         if config.get("google_creds_file"):
             lines.append(f"google_creds_file: {config['google_creds_file']}")
+
+    lines += [
+        "",
+        "# Model selection — override per agent if needed",
+        f"daily_assimilate_model: {config.get('daily_assimilate_model', 'claude-haiku-4-5-20251001')}",
+    ]
 
     config_path.write_text("\n".join(lines) + "\n")
     ok(f"Written: {config_path}")

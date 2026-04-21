@@ -47,5 +47,14 @@ due: 2026-04-30
 
 ---
 
+## Model Selection
+
+| Skill | Model | Reason |
+|---|---|---|
+| PM Artefacts (all commands) | `claude-sonnet-4-6` (session default) | Drafting and synthesis requires judgement |
+| ClickUp Sync | No Claude call — Python only | n/a |
+
+**Convention**: When adding a new skill that invokes Claude, add a row here with the model and a one-line reason. Interactive skills inherit the active session model unless overridden with `--model`.
+
 ## Adding New Skills
-Create a `skills/<skill-name>/README.md` describing the skill's purpose, entry points, and output conventions. Add a reference here.
+Create a `skills/<skill-name>/README.md` describing the skill's purpose, entry points, and output conventions. Document model selection. Add a reference here.

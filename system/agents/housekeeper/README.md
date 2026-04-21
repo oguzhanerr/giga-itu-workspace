@@ -29,6 +29,16 @@ All machine-specific paths are set via environment variables or `system/config.y
 | `MEETILY_DB` | Path to Meetily SQLite database | `~/Library/Application Support/com.meetily.ai/meeting_minutes.sqlite` |
 | `CLAUDE_BIN` | Path to Claude Code CLI | `~/.local/bin/claude` |
 
+## Model Selection
+
+| Job | Model | Reason |
+|---|---|---|
+| Daily assimilate | `claude-haiku-4-5-20251001` | Read/write only — no complex reasoning |
+
+Override via `DAILY_ASSIMILATE_MODEL` env var or `daily_assimilate_model` in `system/config.yaml`.
+
+**Convention**: When adding a new scheduled job that invokes Claude, document its model choice here with a one-line reason.
+
 ## Scheduled Jobs
 
 | Job | Script | Schedule |

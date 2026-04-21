@@ -21,5 +21,9 @@ Generate product management documents from structured inputs. All output goes to
 
 Full command definitions in `.claude/commands/`.
 
+## Model
+
+`claude-sonnet-4-6` (session default) — drafting and synthesis requires judgement. Override with `--model` if running non-interactively.
+
 ## Output conventions
 All artefacts stage to `2_for-review/` first. Once confirmed, file to `projects/<product>/`.
