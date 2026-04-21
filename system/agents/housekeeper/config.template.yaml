@@ -1,0 +1,16 @@
+# Copy this to system/config.yaml and fill in your values.
+# system/config.yaml is personal — do not share or commit it.
+
+# Absolute path to your vault root (the folder containing CLAUDE.md)
+vault_dir: /path/to/your/vault
+
+# Your reverse-domain identifier for launchd job labels (macOS only)
+# e.g. com.yourname or com.teamname.yourname
+launchd_prefix: com.yourname
+
+# Path to the Claude Code CLI binary
+claude_bin: ~/.local/bin/claude
+
+# macOS only — Meetily SQLite database path
+# Leave as default unless Meetily is installed in a non-standard location
+meetily_db: ~/Library/Application Support/com.meetily.ai/meeting_minutes.sqlite

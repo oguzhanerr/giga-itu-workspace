@@ -1,0 +1,5 @@
+# Python dependencies for the vault agent system.
+# Install with: pip3 install -r system/requirements.txt
+
+# Used by system/utilities/gen-objectives-xlsx.py
+openpyxl>=3.1
