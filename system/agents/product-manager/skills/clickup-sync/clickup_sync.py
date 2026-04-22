@@ -22,22 +22,41 @@ import urllib.error
 from datetime import datetime
 
 # ---------------------------------------------------------------------------
-# Config — update SPRINT_LIST_ID at the start of each sprint
+# Config — read from env vars or system/config.yaml, never hardcoded
 # ---------------------------------------------------------------------------
-VAULT = os.environ.get("VAULT_DIR", str(Path(__file__).parents[4]))
+VAULT     = os.environ.get("VAULT_DIR", str(Path(__file__).parents[4]))
 TASKS_DIR = os.path.join(VAULT, "tasks")
 
-SPRINT_LIST_ID = "901522653651"  # Sprint 7 (4/6–4/19) — UPDATE EACH SPRINT
 
-BACKLOG_LIST_IDS = {
-    "mobile-simulation-tool":      "901518416634",
-    "gigakix":                     "901521310168",
-    "mobile-coverage-validation":  "901512762745",
-    "giga-global-data-platform":   "901519407919",
-    "upm-plugin":                  "901519408025",
-    "giga-roam":                   "901519407956",
-    "giga-login":                  "901522494000",
-}
+def _load_config() -> dict:
+    p = Path(VAULT) / "system/config.yaml"
+    cfg = {}
+    if p.exists():
+        for line in p.read_text().splitlines():
+            m = re.match(r"^([\w-]+):\s*(.+)", line)
+            if m:
+                cfg[m.group(1)] = m.group(2).strip()
+    return cfg
+
+
+_cfg = _load_config()
+
+
+def _get(env_key: str, cfg_key: str = "", default: str = "") -> str:
+    return os.environ.get(env_key) or _cfg.get(cfg_key or env_key.lower(), default)
+
+
+SPRINT_LIST_ID = _get("CLICKUP_SPRINT_LIST_ID", "clickup_sprint_list_id")
+
+_bl_json = os.environ.get("CLICKUP_BACKLOG_LIST_IDS")
+if _bl_json:
+    BACKLOG_LIST_IDS: dict = json.loads(_bl_json)
+else:
+    BACKLOG_LIST_IDS = {
+        k[len("clickup_backlog_"):].replace("_", "-"): v
+        for k, v in _cfg.items()
+        if k.startswith("clickup_backlog_")
+    }
 
 PRIORITY_MAP = {"urgent": 1, "high": 2, "medium": 3, "normal": 3, "low": 4}
 STATUS_MAP = {
@@ -173,8 +192,10 @@ def sync_file(filepath):
     fm, body = parse_frontmatter(content)
     tags = fm.get("tags", [])
 
-    # Only sync actual task/idea notes
+    # Only sync work/development task and idea notes — skip personal
     if "task" not in tags and "idea" not in tags:
+        return
+    if "personal" in tags:
         return
 
     # Skip completed/cancelled tasks from being re-created

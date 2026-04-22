@@ -296,12 +296,30 @@ def step_clickup():
         warn("Token doesn't look right — should start with pk_")
     config["clickup_token"] = token
 
-    sprint_list = ask("Sprint list ID (find in ClickUp URL when viewing the list)")
-    config["clickup_sprint_list_id"] = sprint_list
+    team_id = ask("ClickUp Team ID (in URL: app.clickup.com/<team-id>/...) — enables sprint auto-detection", "")
+    if team_id:
+        config["clickup_team_id"] = team_id
+        info("Sprint list will be auto-detected from ClickUp each run.")
+    else:
+        sprint_list = ask("Sprint list ID (find in ClickUp URL when viewing the list)")
+        config["clickup_sprint_list_id"] = sprint_list
+        sprint_name = ask("Sprint display name (e.g. S7)", "S1")
+        config["clickup_sprint_name"] = sprint_name
 
-    backlog_list = ask("Backlog list ID (leave blank to skip)", "")
-    if backlog_list:
-        config["clickup_backlog_list_id"] = backlog_list
+    info("Enter backlog list IDs per project. Format: project-tag=list-id")
+    info("Example: mobile-simulation-tool=901518416634")
+    info("Leave blank when done.")
+    backlog_ids = {}
+    while True:
+        entry = ask("Backlog list (or blank to finish)", "")
+        if not entry:
+            break
+        if "=" in entry:
+            proj, lid = entry.split("=", 1)
+            backlog_ids[proj.strip()] = lid.strip()
+        else:
+            warn("Expected format: project-tag=list-id — skipping.")
+    config["clickup_backlog_ids"] = backlog_ids
 
     # Check fswatch (macOS/Linux)
     if not IS_WIN:
@@ -611,6 +629,16 @@ def _setup_launchd(agent_dir: Path):
         env_vars["MS_TENANT_ID"] = config.get("ms_tenant_id", "common")
     if config.get("google_creds_file"):
         env_vars["GOOGLE_CREDS_FILE"] = config["google_creds_file"]
+    if config.get("clickup_token"):
+        env_vars["CLICKUP_TOKEN"] = config["clickup_token"]
+    if config.get("clickup_team_id"):
+        env_vars["CLICKUP_TEAM_ID"] = config["clickup_team_id"]
+    if config.get("clickup_sprint_list_id"):
+        env_vars["CLICKUP_SPRINT_LIST_ID"] = config["clickup_sprint_list_id"]
+    if config.get("clickup_sprint_name"):
+        env_vars["CLICKUP_SPRINT_NAME"] = config["clickup_sprint_name"]
+    if config.get("clickup_backlog_ids"):
+        env_vars["CLICKUP_BACKLOG_LIST_IDS"] = json.dumps(config["clickup_backlog_ids"])
     # Model overrides — default to Haiku for scheduled lightweight tasks
     env_vars["DAILY_ASSIMILATE_MODEL"] = config.get(
         "daily_assimilate_model", "claude-haiku-4-5-20251001"

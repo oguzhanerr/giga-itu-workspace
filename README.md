@@ -101,9 +101,10 @@ graph TB
         MR["/metrics-review"]
     end
 
-    subgraph CUS["ClickUp Sync"]
+    subgraph CUS["ClickUp Sync (work tasks only)"]
         FW["clickup_watch.sh<br/>fswatch watcher"]
-        CS["clickup_sync.py"]
+        CS["clickup_sync.py<br/>push: vault → ClickUp"]
+        CP["clickup-pull.py<br/>pull: ClickUp → vault"]
     end
 
     ART -->|"all artefacts"| REV["2_for-review/"]
@@ -111,6 +112,8 @@ graph TB
     FW -->|"file change"| CS
     CS -->|"CREATE / UPDATE"| CU["📋 ClickUp"]
     CU -->|"id written back"| TSK["tasks/*.md"]
+    CU -->|"status · priority · due"| CP
+    CP -->|"update front matter<br/>08:00 scheduled"| TSK
 
     style REV fill:#fff3cd
     style PROJ fill:#d4edda
@@ -120,15 +123,15 @@ graph TB
 
 ## Task lifecycle
 
-Tasks originate from daily notes (via `/process-autopilot`) or meeting exports (via Meetily). Once a task note exists, ClickUp sync picks it up automatically via fswatch.
+Tasks originate from daily notes (via `/process-autopilot`) or meeting exports (via Meetily). Once a work task note exists, ClickUp sync picks it up automatically via fswatch. A scheduled pull at 08:00 brings status, priority, and due date changes back from ClickUp. Personal tasks (tagged `personal`) are never synced.
 
 ```mermaid
 stateDiagram-v2
     [*] --> DailyNote: written in inbox/
     DailyNote --> TaskNote: /process-autopilot
     MeetingExport --> TaskNote: meetily-export.py
-    TaskNote --> ClickUp: no clickup_id → CREATE
-    ClickUp --> TaskNote: writes id back
+    TaskNote --> ClickUp: no clickup_id → CREATE (work only)
+    ClickUp --> TaskNote: id written back<br/>status · priority · due pulled
 
     state TaskNote {
         todo --> in_progress: work starts
@@ -199,7 +202,8 @@ Scheduled agents use Haiku to avoid burning tokens on lightweight read/write tas
 | `daily-assimilate` | `claude-haiku-4-5` | read/write only, no reasoning needed |
 | `calendar-sync` | Python only | no Claude call |
 | `meetily-export` | Python only | no Claude call |
-| `clickup_sync` | Python only | no Claude call |
+| `clickup_sync` | Python only | no Claude call — push only |
+| `clickup-pull` | Python only | no Claude call — scheduled pull |
 | `/process-autopilot` | Sonnet (session) | routing + judgement calls |
 | `/assimilate` | Sonnet (session) | pattern matching across session |
 | PM Artefacts | Sonnet (session) | drafting + synthesis |
