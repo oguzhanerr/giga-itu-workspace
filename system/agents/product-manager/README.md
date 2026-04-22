@@ -49,12 +49,23 @@ due: 2026-04-30
 
 ## Model Selection
 
-| Skill | Model | Reason |
+Three tiers — pick based on what the task actually needs:
+
+| Tier | Model | Use when |
 |---|---|---|
-| PM Artefacts (all commands) | `claude-sonnet-4-6` (session default) | Drafting and synthesis requires judgement |
+| Complex planning | `claude-opus-4-7` | New PRD, strategy doc, novel system design, ambiguous requirements |
+| Standard execution | `claude-sonnet-4-6` | Drafting, synthesis, roadmap updates, research synthesis |
+| Simple execution | `claude-haiku-4-5-20251001` | File ops, extraction — not used for PM Artefacts |
+
+| Skill | Default model | Why |
+|---|---|---|
+| PM Artefacts — complex (new PRD, strategy) | `claude-opus-4-7` | Planning phase requires deep reasoning on ambiguous scope |
+| PM Artefacts — standard (updates, briefs) | `claude-sonnet-4-6` | Drafting and synthesis requires judgement |
 | ClickUp Sync | No Claude call — Python only | n/a |
 
-**Convention**: When adding a new skill that invokes Claude, add a row here with the model and a one-line reason. Interactive skills inherit the active session model unless overridden with `--model`.
+Interactive skills inherit the active session model. Start the session with `--model claude-opus-4-7` for genuinely complex artefacts; Sonnet for everything else.
+
+**Convention**: When adding a new skill that invokes Claude, add a row here with the model and a one-line reason.
 
 ## Adding New Skills
 Create a `skills/<skill-name>/README.md` describing the skill's purpose, entry points, and output conventions. Document model selection. Add a reference here.

@@ -195,20 +195,28 @@ flowchart TD
 
 ## Model selection
 
-Scheduled agents use Haiku to avoid burning tokens on lightweight read/write tasks. Interactive skills run in the active Claude session and use whatever model is loaded.
+Three tiers — Opus 4.7 only for genuinely complex planning. Scheduled agents auto-select between Haiku and Sonnet based on a complexity heuristic.
 
-| Agent / Skill | Model | Why |
+| Tier | Model | Use when |
 |---|---|---|
-| `daily-assimilate` | `claude-haiku-4-5` | read/write only, no reasoning needed |
+| Complex planning | `claude-opus-4-7` | New system design, novel PRD, ambiguous strategy, multi-system changes |
+| Standard execution | `claude-sonnet-4-6` | Drafting, synthesis, routing with judgement |
+| Simple execution | `claude-haiku-4-5` | File ops, extraction, front matter updates |
+
+| Agent / Skill | Default model | Why |
+|---|---|---|
+| `daily-assimilate` (quiet day) | Haiku | read/write only |
+| `daily-assimilate` (system changed) | Sonnet | auto-detected: agent files modified today |
 | `calendar-sync` | Python only | no Claude call |
 | `meetily-export` | Python only | no Claude call |
 | `clickup_sync` | Python only | no Claude call — push only |
 | `clickup-pull` | Python only | no Claude call — scheduled pull |
 | `/process-autopilot` | Sonnet (session) | routing + judgement calls |
 | `/assimilate` | Sonnet (session) | pattern matching across session |
-| PM Artefacts | Sonnet (session) | drafting + synthesis |
+| PM Artefacts — standard | Sonnet (session) | drafting + synthesis |
+| PM Artefacts — complex | Opus 4.7 (session) | new PRD / strategy — start with `--model claude-opus-4-7` |
 
-Override scheduled models via `DAILY_ASSIMILATE_MODEL` env var or `daily_assimilate_model` in `system/config.yaml`.
+Override `daily-assimilate` model via `DAILY_ASSIMILATE_MODEL` env var.
 
 ---
 

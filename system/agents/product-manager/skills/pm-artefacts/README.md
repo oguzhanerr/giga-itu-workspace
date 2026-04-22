@@ -23,7 +23,12 @@ Full command definitions in `.claude/commands/`.
 
 ## Model
 
-`claude-sonnet-4-6` (session default) — drafting and synthesis requires judgement. Override with `--model` if running non-interactively.
+| Complexity | Model | When |
+|---|---|---|
+| Genuinely complex | `claude-opus-4-7` | New PRD, strategy doc, novel/ambiguous scope |
+| Standard | `claude-sonnet-4-6` | Roadmap updates, stakeholder updates, research synthesis, briefs |
+
+Start the Claude Code session with `--model claude-opus-4-7` for genuinely complex artefacts. Default to Sonnet for everything else.
 
 ## Output conventions
 All artefacts stage to `2_for-review/` first. Once confirmed, file to `projects/<product>/`.

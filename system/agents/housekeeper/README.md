@@ -31,11 +31,20 @@ All machine-specific paths are set via environment variables or `system/config.y
 
 ## Model Selection
 
-| Job | Model | Reason |
-|---|---|---|
-| Daily assimilate | `claude-haiku-4-5-20251001` | Read/write only — no complex reasoning |
+Three tiers — pick based on what the job actually needs:
 
-Override via `DAILY_ASSIMILATE_MODEL` env var or `daily_assimilate_model` in `system/config.yaml`.
+| Tier | Model | Use when |
+|---|---|---|
+| Complex planning | `claude-opus-4-7` | New system design, ambiguous requirements, multi-system changes |
+| Standard execution | `claude-sonnet-4-6` | Drafting, synthesis, routing with judgement calls |
+| Simple execution | `claude-haiku-4-5-20251001` | File ops, extraction, front matter updates |
+
+| Job | Default model | Why |
+|---|---|---|
+| Daily assimilate (quiet day) | `claude-haiku-4-5-20251001` | Read/write only — no reasoning needed |
+| Daily assimilate (system changed) | `claude-sonnet-4-6` | Auto-detected: agent files or CLAUDE.md modified today |
+
+The script selects Haiku or Sonnet automatically. Override via `DAILY_ASSIMILATE_MODEL` env var.
 
 **Convention**: When adding a new scheduled job that invokes Claude, document its model choice here with a one-line reason.
 

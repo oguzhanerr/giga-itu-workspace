@@ -3,8 +3,20 @@
 
 VAULT="${VAULT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 CLAUDE="${CLAUDE_BIN:-$HOME/.local/bin/claude}"
-# Haiku: lightweight read/write task, no complex reasoning needed
-MODEL="${DAILY_ASSIMILATE_MODEL:-claude-haiku-4-5-20251001}"
+
+# Complexity heuristic: if system agents or CLAUDE.md changed today → Sonnet (conventions may need updating)
+# Otherwise → Haiku (simple read/write, no reasoning needed)
+# Manual override always wins via DAILY_ASSIMILATE_MODEL env var
+if [ -n "${DAILY_ASSIMILATE_MODEL}" ]; then
+    MODEL="$DAILY_ASSIMILATE_MODEL"
+else
+    SYSTEM_CHANGES=$(find "$VAULT/system/agents" "$VAULT/CLAUDE.md" -type f -mtime -1 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$SYSTEM_CHANGES" -gt 0 ]; then
+        MODEL="claude-sonnet-4-6"
+    else
+        MODEL="claude-haiku-4-5-20251001"
+    fi
+fi
 
 "$CLAUDE" -p "You are running an end-of-day retrospective for Oz's personal vault. Your job is to review what happened today and persist any stable learnings to memory files or CLAUDE.md.
 
