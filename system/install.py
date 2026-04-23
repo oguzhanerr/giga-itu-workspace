@@ -266,7 +266,11 @@ def step_claude():
             else:
                 warn(f"Binary not found at {path} — set CLAUDE_BIN env var manually.")
         else:
-            info("Install Claude Code from: https://claude.ai/code")
+            if IS_LINUX:
+                info("Install Claude Code: npm install -g @anthropic-ai/claude-code")
+                info("  or: https://claude.ai/code")
+            else:
+                info("Install Claude Code from: https://claude.ai/code")
             config["claude_bin"] = detected
             results.append(("Claude Code CLI", "⚠", "Not installed — install from claude.ai/code"))
             return
@@ -321,26 +325,55 @@ def step_clickup():
             warn("Expected format: project-tag=list-id — skipping.")
     config["clickup_backlog_ids"] = backlog_ids
 
-    # Check fswatch (macOS/Linux)
+    # Check file watcher — fswatch on macOS, inotifywait on Linux
     if not IS_WIN:
         fswatch = shutil.which("fswatch")
+        inotifywait = shutil.which("inotifywait") if IS_LINUX else None
         if fswatch:
             ok(f"fswatch found at: {fswatch}")
             config["fswatch_bin"] = fswatch
+            config["watcher_type"] = "fswatch"
+        elif inotifywait:
+            ok(f"inotifywait found at: {inotifywait}")
+            config["fswatch_bin"] = inotifywait
+            config["watcher_type"] = "inotifywait"
         else:
-            warn("fswatch not found.")
+            warn("File watcher not found.")
             if IS_MAC:
                 info("Install with: brew install fswatch")
             elif IS_LINUX:
-                info("Install with: apt install fswatch  or  dnf install fswatch")
-            results.append(("ClickUp sync / fswatch", "⚠", "Install fswatch then re-run"))
+                info("Install with: apt install inotify-tools")
+            results.append(("ClickUp sync / file watcher", "⚠", "Install inotify-tools (Linux) or fswatch (macOS) then re-run"))
             return
     else:
-        info("Windows: fswatch not supported. ClickUp sync requires manual trigger or WSL.")
+        info("Windows: file watcher not supported. ClickUp sync requires manual trigger or WSL.")
         results.append(("ClickUp sync", "⚠", "Not supported on Windows without WSL"))
         return
 
-    results.append(("ClickUp sync", "✓", f"Token set · Sprint list: {sprint_list}"))
+    results.append(("ClickUp sync", "✓", f"Token set · Sprint list: {config.get('clickup_sprint_list_id', 'auto-detected')}"))
+
+
+def step_clickup_mcp():
+    title("3b · ClickUp MCP (Claude Code)")
+
+    if not config.get("clickup_enabled"):
+        skip("ClickUp MCP")
+        return
+
+    if not confirm("Register ClickUp as an MCP server in Claude Code?"):
+        skip("ClickUp MCP")
+        results.append(("ClickUp MCP", "–", "Skipped"))
+        return
+
+    claude = config.get("claude_bin", shutil.which("claude") or "claude")
+    r = run([claude, "mcp", "add", "--transport", "http", "clickup", "https://mcp.clickup.com/mcp"])
+    if r.returncode == 0:
+        ok("ClickUp MCP registered — OAuth will open on first Claude Code session.")
+        results.append(("ClickUp MCP", "✓", "Registered · OAuth on first use"))
+    else:
+        warn(f"Could not register MCP: {r.stderr.strip() or r.stdout.strip()}")
+        info("Run manually: claude mcp add --transport http clickup https://mcp.clickup.com/mcp")
+        results.append(("ClickUp MCP", "⚠", "Register manually — see above"))
 
 
 def step_meetily():
@@ -510,8 +543,11 @@ def step_mcp():
 
     if IS_WIN:
         config_path = Path.home() / "AppData/Roaming/Claude/claude_desktop_config.json"
-    else:
+    elif IS_MAC:
         config_path = Path.home() / "Library/Application Support/Claude/claude_desktop_config.json"
+    else:  # Linux
+        xdg_config = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+        config_path = xdg_config / "Claude/claude_desktop_config.json"
 
     if not config_path.exists():
         warn(f"Claude desktop config not found at: {config_path}")
@@ -611,6 +647,20 @@ def _setup_launchd(agent_dir: Path):
                  str(agent_dir / "daily-assimilate.log"),
                  [18]))
 
+    # Token parser (runs at 18:05 to let assimilate finish first)
+    jobs.append((f"{prefix}.token-parser", python,
+                 [str(VAULT_DIR / "system/scripts/token-parser.py")],
+                 str(VAULT_DIR / "system/scripts/token-parser.log"),
+                 [18]))
+
+    # ClickUp pull (morning + evening)
+    if config.get("clickup_enabled"):
+        clickup_dir = VAULT_DIR / "system/agents/product-manager/skills/clickup-sync"
+        jobs.append((f"{prefix}.clickup-pull", python,
+                     [str(clickup_dir / "clickup-pull.py")],
+                     str(clickup_dir / "clickup-pull.log"),
+                     [8, 18]))
+
     env_vars = {
         "PATH": f"{Path.home()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
         "HOME": str(Path.home()),
@@ -643,6 +693,51 @@ def _setup_launchd(agent_dir: Path):
     env_vars["DAILY_ASSIMILATE_MODEL"] = config.get(
         "daily_assimilate_model", "claude-haiku-4-5-20251001"
     )
+
+    # ClickUp push watcher — KeepAlive daemon (not interval-based)
+    if config.get("clickup_enabled") and config.get("fswatch_bin"):
+        clickup_dir = VAULT_DIR / "system/agents/product-manager/skills/clickup-sync"
+        watcher_label = f"{prefix}.clickup-watch"
+        watcher_plist = launchd_dir / f"{watcher_label}.plist"
+        watcher_env = "\n".join(
+            f"        <key>{k}</key>\n        <string>{v}</string>"
+            for k, v in env_vars.items()
+        )
+        watcher_xml = dedent(f"""\
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+              "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+                <key>Label</key>
+                <string>{watcher_label}</string>
+                <key>ProgramArguments</key>
+                <array>
+                    <string>/bin/bash</string>
+                    <string>{clickup_dir / "clickup_watch.sh"}</string>
+                </array>
+                <key>RunAtLoad</key>
+                <true/>
+                <key>KeepAlive</key>
+                <true/>
+                <key>StandardOutPath</key>
+                <string>{clickup_dir}/clickup-watch.log</string>
+                <key>StandardErrorPath</key>
+                <string>{clickup_dir}/clickup-watch.log</string>
+                <key>EnvironmentVariables</key>
+                <dict>
+            {watcher_env}
+                </dict>
+            </dict>
+            </plist>
+        """)
+        watcher_plist.write_text(watcher_xml)
+        run(["launchctl", "unload", str(watcher_plist)])
+        r = run(["launchctl", "load", str(watcher_plist)])
+        if r.returncode == 0:
+            ok(f"Registered: {watcher_label} (KeepAlive watcher)")
+        else:
+            warn(f"Could not load {watcher_label}: {r.stderr.strip()}")
 
     for label, program, args, log, hours in jobs:
         intervals = []
@@ -707,32 +802,50 @@ def _setup_systemd(agent_dir: Path):
     unit_dir = Path.home() / ".config/systemd/user"
     unit_dir.mkdir(parents=True, exist_ok=True)
 
-    jobs = []
-    if config.get("calendar_enabled"):
-        warn("Calendar sync is not available on Linux (Apple Calendar / EventKit is macOS-only).")
+    if config.get("calendar_enabled") and config.get("calendar_provider") == "apple":
+        warn("Apple Calendar (EventKit) is macOS-only — calendar sync skipped on Linux.")
+
+    # jobs: (name, exec_start, on_calendar)
+    jobs = [
+        ("vault-assimilate",    f"/bin/bash {agent_dir / 'daily-assimilate.sh'}", "Mon-Fri 18:00"),
+        ("vault-token-parser",  f"{python} {VAULT_DIR / 'system/scripts/token-parser.py'}", "Mon-Fri 18:05"),
+    ]
+    if config.get("calendar_enabled") and config.get("calendar_provider") != "apple":
+        jobs.append(("vault-calendar-sync", f"{python} {agent_dir / 'calendar-sync.py'}",
+                     "Mon-Fri 08:00\nOnCalendar=Mon-Fri 18:00"))
     if config.get("meetily_enabled"):
-        warn("Meetily export is not available on Linux (Meetily is a macOS app).")
+        jobs.append(("vault-meetily-sync", f"{python} {agent_dir / 'meetily-export.py'}",
+                     "Mon-Fri 08:00\nOnCalendar=Mon-Fri 18:00"))
+    if config.get("clickup_enabled"):
+        clickup_dir = VAULT_DIR / "system/agents/product-manager/skills/clickup-sync"
+        jobs.append(("vault-clickup-pull", f"{python} {clickup_dir / 'clickup-pull.py'}",
+                     "Mon-Fri 08:00\nOnCalendar=Mon-Fri 18:00"))
 
-    # Daily assimilate
-    jobs.append(("vault-assimilate", str(agent_dir / "daily-assimilate.sh"), "18:00"))
+    env_vars = (
+        f"Environment=VAULT_DIR={vault_path}\n"
+        f"Environment=HOME={Path.home()}"
+    )
+    if config.get("clickup_token"):
+        env_vars += f"\nEnvironment=CLICKUP_TOKEN={config['clickup_token']}"
+    if config.get("clickup_team_id"):
+        env_vars += f"\nEnvironment=CLICKUP_TEAM_ID={config['clickup_team_id']}"
 
-    for name, script, time_val in jobs:
+    for name, exec_start, on_calendar in jobs:
         service = dedent(f"""\
             [Unit]
             Description=Vault {name}
 
             [Service]
             Type=oneshot
-            ExecStart=/bin/bash {script}
-            Environment=VAULT_DIR={vault_path}
-            Environment=HOME={Path.home()}
+            ExecStart={exec_start}
+            {env_vars}
         """)
         timer = dedent(f"""\
             [Unit]
-            Description=Run vault-{name} on weekdays at {time_val}
+            Description=Run {name}
 
             [Timer]
-            OnCalendar=Mon-Fri {time_val}
+            OnCalendar={on_calendar}
             Persistent=true
 
             [Install]
@@ -742,22 +855,49 @@ def _setup_systemd(agent_dir: Path):
         (unit_dir / f"{name}.timer").write_text(timer)
         info(f"Written: {unit_dir}/{name}.service + .timer")
 
+    # ClickUp push watcher — systemd service with Restart=always
+    if config.get("clickup_enabled") and config.get("fswatch_bin"):
+        clickup_dir = VAULT_DIR / "system/agents/product-manager/skills/clickup-sync"
+        watcher_service = dedent(f"""\
+            [Unit]
+            Description=ClickUp vault watcher
+
+            [Service]
+            ExecStart=/bin/bash {clickup_dir / 'clickup_watch.sh'}
+            Restart=always
+            RestartSec=5
+            {env_vars}
+
+            [Install]
+            WantedBy=default.target
+        """)
+        (unit_dir / "vault-clickup-watch.service").write_text(watcher_service)
+        info(f"Written: {unit_dir}/vault-clickup-watch.service")
+        jobs.append(("vault-clickup-watch", "", ""))  # include in enable list
+
     print()
     info("To enable, run:")
     for name, _, _ in jobs:
-        info(f"  systemctl --user enable --now {name}.timer")
+        if name == "vault-clickup-watch":
+            info(f"  systemctl --user enable --now {name}.service")
+        else:
+            info(f"  systemctl --user enable --now {name}.timer")
 
     results.append(("Scheduler (systemd)", "✓", f"Unit files written to {unit_dir} — enable manually"))
 
 
 def _setup_windows(agent_dir: Path):
     info("Windows Task Scheduler — manual setup required.")
+    vault_path = config.get("vault_dir", str(VAULT_DIR))
+    python     = shutil.which("python3") or "python3"
     print()
-    info("To schedule the daily assimilate on Windows:")
-    info("  1. Open Task Scheduler")
-    info(f"  2. Create a task that runs: bash {agent_dir / 'daily-assimilate.sh'}")
-    info("  3. Set trigger: Mon–Fri at 18:00")
-    info(f"  4. Set environment variable: VAULT_DIR={config.get('vault_dir', VAULT_DIR)}")
+    info("Create the following tasks in Task Scheduler (Mon–Fri triggers):")
+    info(f"  18:00 — bash {agent_dir / 'daily-assimilate.sh'}")
+    info(f"  18:05 — {python} {VAULT_DIR / 'system/scripts/token-parser.py'}")
+    if config.get("clickup_enabled"):
+        clickup_dir = VAULT_DIR / "system/agents/product-manager/skills/clickup-sync"
+        info(f"  08:00 + 18:00 — {python} {clickup_dir / 'clickup-pull.py'}")
+    info(f"Set environment variable VAULT_DIR={vault_path} on each task.")
     print()
     info("Calendar sync and Meetily export are not available on Windows.")
     results.append(("Scheduler (Windows)", "⚠", "Manual Task Scheduler setup required"))
@@ -866,7 +1006,9 @@ def step_summary():
     if not errors and not warnings:
         ok("All components set up successfully.")
 
-    print(f"\n  {DIM}Run this installer again any time to update your config.{RESET}\n")
+    print(f"\n  {DIM}Run this installer again any time to update your config.{RESET}")
+    print(f"\n  {BOLD}Manual step:{RESET} Enable the dashboard CSS snippet in Obsidian:")
+    print(f"  {DIM}Settings → Appearance → CSS snippets → enable 'dashboard'{RESET}\n")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -877,6 +1019,7 @@ def main():
     step_vault()
     step_claude()
     step_clickup()
+    step_clickup_mcp()
     step_meetily()
     step_calendar()
     step_mcp()

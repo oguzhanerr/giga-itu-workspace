@@ -102,7 +102,7 @@ graph TB
     end
 
     subgraph CUS["ClickUp Sync (work tasks only)"]
-        FW["clickup_watch.sh<br/>fswatch watcher"]
+        FW["clickup_watch.sh<br/>fswatch / inotifywait watcher"]
         CS["clickup_sync.py<br/>push: vault → ClickUp"]
         CP["clickup-pull.py<br/>pull: ClickUp → vault"]
     end
@@ -222,14 +222,14 @@ Override `daily-assimilate` model via `DAILY_ASSIMILATE_MODEL` env var.
 
 ## Prerequisites
 
-| Requirement | Notes |
-|---|---|
-| [Obsidian](https://obsidian.md) | Your vault |
-| [Claude Code CLI](https://claude.ai/code) | `~/.local/bin/claude` |
-| Python 3.9+ | `python3 --version` |
-| Node.js | For Claude desktop MCP — `brew install node` |
-| [fswatch](https://github.com/emcrisostomo/fswatch) | ClickUp sync file watcher — `brew install fswatch` |
-| [Meetily](https://meetily.ai) | Optional |
+| Requirement | macOS | Linux (Ubuntu) | Notes |
+|---|---|---|---|
+| [Obsidian](https://obsidian.md) | ✅ | ✅ | Your vault |
+| [Claude Code CLI](https://claude.ai/code) | `brew install node && npm i -g @anthropic-ai/claude-code` | `apt install nodejs npm && npm i -g @anthropic-ai/claude-code` | |
+| Python 3.9+ | pre-installed | `apt install python3` | `python3 --version` |
+| Node.js | `brew install node` | `apt install nodejs npm` | For Claude desktop MCP |
+| File watcher | `brew install fswatch` | `apt install inotify-tools` | ClickUp live sync |
+| [Meetily](https://meetily.ai) | Optional | Optional | Meeting recordings |
 
 ---
 
@@ -241,7 +241,18 @@ cd giga-itu-workspace
 python3 system/install.py
 ```
 
-The installer walks through each component, asks which calendar provider you use, and writes `system/config.yaml` with your personal settings.
+The installer walks through each component interactively and writes `system/config.yaml` with your settings.
+
+**Ubuntu quick-start** — install prerequisites first:
+```bash
+sudo apt install python3 nodejs npm inotify-tools
+npm install -g @anthropic-ai/claude-code
+```
+
+**Notes:**
+- Apple Calendar is macOS-only — use Outlook or Google Calendar on Linux
+- The installer detects `inotifywait` automatically on Linux (no fswatch needed)
+- ClickUp MCP is registered via the installer; OAuth opens on first Claude Code session
 
 ---
 
@@ -269,7 +280,8 @@ system/
 | Calendar sync (Apple) | ✅ | ❌ | ❌ |
 | Calendar sync (Outlook/Google) | ✅ | ✅ | ✅ |
 | Meetily export | ✅ | ✅ | ✅ |
-| ClickUp sync | ✅ | ✅ | ⚠ WSL only |
+| ClickUp sync (file watcher) | ✅ fswatch | ✅ inotifywait | ⚠ WSL only |
+| ClickUp MCP | ✅ | ✅ | ✅ |
 | Claude desktop MCP | ✅ | ✅ | ✅ |
 
 ---
